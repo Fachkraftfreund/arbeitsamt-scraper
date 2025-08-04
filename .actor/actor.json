@@ -1,7 +1,7 @@
 {
 	"actorSpecification": 1,
 	"name": "arbeitsamt-scraping",
-	"title": "Project Playwright Crawler Typescript",
+	"title": "Arbeitsamt Scraper",
 	"description": "Crawlee and Playwright project in typescript.",
 	"version": "0.0",
 	"meta": {
