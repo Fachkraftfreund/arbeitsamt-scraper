@@ -3,22 +3,22 @@
     "type": "object",
     "schemaVersion": 1,
     "properties": {
-        "startUrls": {
-            "title": "Start URLs",
-            "type": "array",
-            "description": "URLs to start with.",
+        "searchUrl": {
+            "title": "Search URLs",
+            "type": "string",
+            "description": "arbeitsamt url with search parameters",
             "editor": "requestListSources",
             "prefill": [
                 {
-                    "url": "https://apify.com"
+                    "url": "https://www.arbeitsagentur.de/jobsuche/suche?angebotsart=1&was=ZFA&wo=Deutschland%20(Land)"
                 }
             ]
         },
-        "maxRequestsPerCrawl": {
-            "title": "Max Requests per Crawl",
+        "parallelCompanyCrawlers": {
+            "title": "Parallel Company Crawlers",
             "type": "integer",
-            "description": "Maximum number of requests that can be made by this crawler.",
-            "default": 100
+            "description": "Parallel to jobs, companies are crawled. This value sets the maximum number of parallel crawlers.",
+            "default": 2
         }
     }
 }
