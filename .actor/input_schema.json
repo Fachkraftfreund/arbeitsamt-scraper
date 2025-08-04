@@ -8,11 +8,7 @@
             "type": "string",
             "description": "arbeitsamt url with search parameters",
             "editor": "requestListSources",
-            "prefill": [
-                {
-                    "url": "https://www.arbeitsagentur.de/jobsuche/suche?angebotsart=1&was=ZFA&wo=Deutschland%20(Land)"
-                }
-            ]
+            "prefill": "https://www.arbeitsagentur.de/jobsuche/suche?angebotsart=1&was=ZFA&wo=Deutschland%20(Land)"
         },
         "parallelCompanyCrawlers": {
             "title": "Parallel Company Crawlers",
