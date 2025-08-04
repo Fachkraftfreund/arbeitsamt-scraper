@@ -23,7 +23,7 @@ type Posting = {
 
 export class ArbeitsagenturCrawler {
 
-    static async construct(parallelCompanyCrawlers = 2): Promise<ArbeitsagenturCrawler> {
+    static async construct(parallelCompanyCrawlers: number): Promise<ArbeitsagenturCrawler> {
         const jobCrawler = await Crawler.create({ iDontCareAboutCookies: true });
         const companyCrawlers = await Promise.all(new Array(parallelCompanyCrawlers).fill(0).map(() => Crawler.create({ iDontCareAboutCookies: true })));
         return new ArbeitsagenturCrawler(jobCrawler, companyCrawlers);
@@ -117,7 +117,7 @@ export class ArbeitsagenturCrawler {
             for (const posting of postings) {
                 const crawler = this.companyCrawlers[+crawlerIndex] ;
                 const url = `https://www.arbeitsagentur.de/jobsuche/jobdetail/${posting.arbeitsagentur_id}`;
-                await exponentialBackoff(() => crawler.goto(url, false), 5, 5000);
+                await exponentialBackoff(() => crawler.goto(url, true), 5, 5000);
                 const [address, beschreibung, link, companySize] = await Promise.all([
                     crawler.getTextWithId('detail-arbeitsorte-arbeitsort-0'),
                     crawler.getTextWithId('detail-beschreibung-beschreibung'),
