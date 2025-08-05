@@ -55,7 +55,7 @@ export class ArbeitsagenturCrawler {
                 console.log(`Processed ${count} postings, loading next page...`);
                 continue;
             }
-            postings.push({ ...found, company_name: "" });
+            postings.push(found);
             count++;
         }
         if (finalizePromise) await finalizePromise;

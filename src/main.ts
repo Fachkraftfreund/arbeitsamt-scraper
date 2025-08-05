@@ -18,10 +18,7 @@ const {
 } = (await Actor.getInput<Input>()) ?? ({} as Input);
 
 const arbeitsagenturCrawler = await ArbeitsagenturCrawler.construct(parallelCompanyCrawlers);
-await arbeitsagenturCrawler.readPostings(searchUrl, async (postings) => {
-    await Actor.pushData(postings);
-    console.log(`Processed ${postings.length} job postings`);
-});
+await arbeitsagenturCrawler.readPostings(searchUrl, postings => Actor.pushData(postings));
 
 // Exit successfully
 await Actor.exit();
