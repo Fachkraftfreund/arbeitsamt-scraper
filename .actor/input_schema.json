@@ -14,7 +14,15 @@
             "title": "Parallel Company Crawlers",
             "type": "integer",
             "description": "Parallel to jobs, companies are crawled. This value sets the maximum number of parallel crawlers.",
-            "default": 2
+            "default": 3
+        },
+        "memoryMbytes": {
+            "title": "Memory Limit (MB)",
+            "type": "integer",
+            "description": "Memory limit for the scraper in megabytes",
+            "default": 2048,
+            "minimum": 1024,
+            "maximum": 16384
         }
     }
 }
