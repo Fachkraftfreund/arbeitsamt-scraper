@@ -7,11 +7,8 @@
 	"meta": {
 		"templateId": "ts-crawlee-playwright-chrome"
 	},
+    "minMemoryMbytes": 2048,
+    "maxMemoryMbytes": 4096,
 	"input": "./input_schema.json",
-	"dockerfile": "../Dockerfile",
-	"defaultRunOptions": {
-		"memoryMbytes": 2048,
-    	"timeoutSecs": 7200,
-		"build": "latest"
-	}
+	"dockerfile": "../Dockerfile"
 }

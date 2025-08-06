@@ -42,7 +42,7 @@ export class ArbeitsagenturCrawler {
         let count = 0;
         let postings: Posting[] = [];
         await this.jobCrawler.goto(url);
-        await Promise.all(this.companyCrawlers.map(crawler => crawler.goto('https://www.arbeitsagentur.de')));
+        await Promise.all(this.companyCrawlers.map(crawler => crawler.goto('https://www.arbeitsagentur.de/jobsuche/')));
         while (true) {
             const i = count;
             const found = await this.readArbeitsagenturPosting(i);
@@ -104,7 +104,7 @@ export class ArbeitsagenturCrawler {
             await exponentialBackoff(async () => {
                 await this.jobCrawler.clickButton('ergebnisliste-ladeweitere-button');
                 await waitUntil(() => this.jobCrawler.getTextWithId(`eintrag-${i}-firma`));
-            }, 3, 5000);
+            }, 5, 5000);
             return true;
         } catch (e) {
             return false;
@@ -117,7 +117,11 @@ export class ArbeitsagenturCrawler {
             for (const posting of postings) {
                 const crawler = this.companyCrawlers[+crawlerIndex] ;
                 const url = `https://www.arbeitsagentur.de/jobsuche/jobdetail/${posting.arbeitsagentur_id}`;
-                await exponentialBackoff(() => crawler.goto(url, true), 5, 5000);
+                try {
+                    await exponentialBackoff(() => crawler.goto(url, true), 3, 5000);
+                } catch (e) {
+                    await exponentialBackoff(() => crawler.goto(url, false), 3, 5000);
+                }
                 const [address, beschreibung, link, companySize] = await Promise.all([
                     crawler.getTextWithId('detail-arbeitsorte-arbeitsort-0'),
                     crawler.getTextWithId('detail-beschreibung-beschreibung'),

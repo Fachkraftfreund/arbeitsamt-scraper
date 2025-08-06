@@ -3,7 +3,7 @@ import path from 'path';
 import type { Browser, ElementHandle, Page } from 'playwright';
 import playwright from 'playwright';
 
-const TIMEOUT = 10000;
+const TIMEOUT = 30000;
 
 export class Crawler {
 
