@@ -15,23 +15,44 @@ export class Crawler {
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage', // Use /tmp instead of /dev/shm for shared memory
+                    '--disable-gpu', // Disable GPU acceleration to prevent crashes
+                    '--disable-extensions', // Disable extensions except the ones we load
+                    '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding',
+                    '--disable-features=TranslateUI,VizDisplayCompositor',
+                    '--disable-web-security', // Can help with some navigation issues
+                    '--disable-features=VizDisplayCompositor',
+                    '--max-old-space-size=4096', // Increase memory limit
+                    '--memory-pressure-off', // Disable memory pressure detection
                     '--window-size=1080,1440',
                 ]
             }
         };
         if (iDontCareAboutCookies) {
-            const extPath = path.join(process.cwd(), 'shared', 'puppeteer', 'extensions', 'i-dont-care-about-cookies', '1.1.4_0');
+            const extPath = path.join(process.cwd(), 'src', 'extensions', 'i-dont-care-about-cookies', '1.1.4_0');
             launchContext.launchOptions!.args!.push(`--disable-extensions-except=${extPath}`);
             launchContext.launchOptions!.args!.push(`--load-extension=${extPath}`);
         }
         const browser = await playwright.chromium.launch(launchContext.launchOptions);
         const page = await browser.newPage();
+        
+        // Set viewport and user agent for consistency
+        await page.setViewportSize({ width: 1080, height: 1440 });
+        
         // Disable animations to avoid actionability hangs on Angular pages
         await page.addInitScript(() => {
             const style = document.createElement('style');
             style.textContent = `* { transition-duration: 0s !important; animation-duration: 0s !important; }`;
             document.head.appendChild(style);
         });
+        
+        // Handle page crashes gracefully
+        page.on('crash', () => {
+            console.warn('Page crashed, will be recreated on next navigation attempt');
+        });
+        
         return new Crawler(browser, page);
     }
 
@@ -43,39 +64,163 @@ export class Crawler {
         this.page = page;
     }
 
-    public async goto(url: string, useSpaNavigation: boolean = false) {
+    private async recreatePage(): Promise<void> {
+        try {
+            if (!this.page.isClosed()) {
+                await this.page.close();
+            }
+        } catch (error) {
+            // Ignore errors when closing crashed page
+        }
+        
+        // Create new page with same initialization
+        const newPage = await this.browser.newPage();
+        
+        // Set viewport and user agent for consistency
+        await newPage.setViewportSize({ width: 1080, height: 1440 });
+        
+        await newPage.addInitScript(() => {
+            const style = document.createElement('style');
+            style.textContent = `* { transition-duration: 0s !important; animation-duration: 0s !important; }`;
+            document.head.appendChild(style);
+        });
+        
+        // Handle page crashes gracefully
+        newPage.on('crash', () => {
+            console.warn('Page crashed, will be recreated on next navigation attempt');
+        });
+        
+        // Replace the page reference
+        (this as any).page = newPage;
+    }
+
+    private async isPageHealthy(): Promise<boolean> {
+        try {
+            if (this.page.isClosed()) {
+                return false;
+            }
+            // Try a simple evaluation to test if page is responsive
+            await this.page.evaluate(() => document.readyState);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    public async goto(url: string, useSpaNavigation: boolean = false, maxRetries: number = 3) {
         if (!url.startsWith('http')) url = 'http://' + url;
         
-        if (useSpaNavigation) {
-            await this.page.evaluate((url) => {
-                if (window.location.pathname === new URL(url).pathname)
-                    return;
-                
-                if ((window as any).ng) {
-                    const router = (window as any).ng.probe?.((window as any).getAllAngularRootElements?.()?.[0])?.injector?.get?.('Router');
-                    if (router) {
-                        const relativePath = new URL(url).pathname;
-                        router.navigateByUrl(relativePath);
-                        return;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                // Check page health before attempting navigation
+                if (!(await this.isPageHealthy())) {
+                    throw new Error('Page is unhealthy, needs recreation');
+                }
+
+                // Add page crash listener
+                const crashPromise = new Promise<never>((_, reject) => {
+                    this.page.once('crash', () => {
+                        reject(new Error('Page crashed during navigation'));
+                    });
+                });
+
+                if (useSpaNavigation) {
+                    const navigationPromise = (async () => {
+                        await this.page.evaluate((url) => {
+                            if (window.location.pathname === new URL(url).pathname)
+                                return;
+                            
+                            if ((window as any).ng) {
+                                const router = (window as any).ng.probe?.((window as any).getAllAngularRootElements?.()?.[0])?.injector?.get?.('Router');
+                                if (router) {
+                                    const relativePath = new URL(url).pathname;
+                                    router.navigateByUrl(relativePath);
+                                    return;
+                                }
+                            }
+                            const link = document.querySelector(`a[href="${url}"], a[href="${new URL(url).pathname}"]`) as HTMLAnchorElement;
+                            if (link) {
+                                link.click();
+                                return;
+                            }
+                            window.location.href = url;
+                        }, url);
+                        await this.page.waitForFunction((targetUrl) => {
+                            const currentUrl = window.location.href;
+                            const targetPath = new URL(targetUrl).pathname;
+                            const currentPath = new URL(currentUrl).pathname;
+                            return currentPath === targetPath;
+                        }, url, { timeout: TIMEOUT });
+                        await this.page.waitForLoadState('networkidle', { timeout: TIMEOUT });
+                    })();
+
+                    await Promise.race([navigationPromise, crashPromise]);
+                } else {
+                    const gotoPromise = (async () => {
+                        const response = await this.page.goto(url, { waitUntil: 'networkidle', timeout: TIMEOUT });
+                        if (response?.status() !== 200) throw new Error(`Failed to load ${url}: ${response?.status()}`);
+                    })();
+
+                    await Promise.race([gotoPromise, crashPromise]);
+                }
+
+                // If we get here, navigation was successful
+                return;
+
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                console.warn(`Navigation attempt ${attempt + 1}/${maxRetries + 1} failed for ${url}: ${errorMessage}`);
+
+                if (attempt === maxRetries) {
+                    throw new Error(`Failed to navigate to ${url} after ${maxRetries + 1} attempts: ${errorMessage}`);
+                }
+
+                // If page crashed, is closed, or unhealthy, try to recreate it
+                if (errorMessage.includes('crashed') || 
+                    errorMessage.includes('closed') || 
+                    errorMessage.includes('unhealthy') ||
+                    this.page.isClosed()) {
+                    try {
+                        await this.recreatePage();
+                        console.log(`Recreated page after crash on attempt ${attempt + 1}`);
+                    } catch (recreateError) {
+                        console.error(`Failed to recreate page: ${recreateError}`);
+                        if (attempt === maxRetries) {
+                            throw error;
+                        }
                     }
                 }
-                const link = document.querySelector(`a[href="${url}"], a[href="${new URL(url).pathname}"]`) as HTMLAnchorElement;
-                if (link) {
-                    link.click();
-                    return;
-                }
-                window.location.href = url;
-            }, url);
-            await this.page.waitForFunction((targetUrl) => {
-                const currentUrl = window.location.href;
-                const targetPath = new URL(targetUrl).pathname;
-                const currentPath = new URL(currentUrl).pathname;
-                return currentPath === targetPath;
-            }, url, { timeout: TIMEOUT });
-            await this.page.waitForLoadState('networkidle', { timeout: TIMEOUT });
-        } else {
-            const response = await this.page.goto(url, { waitUntil: 'networkidle', timeout: TIMEOUT });
-            if (response?.status() !== 200) throw new Error(`Failed to load ${url}: ${response?.status()}`);
+
+                // Wait before retrying with exponential backoff
+                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+            }
+        }
+    }
+
+    public async cleanupMemory() {
+        try {
+            if (await this.isPageHealthy()) {
+                // Clear browser cache and run garbage collection
+                await this.page.evaluate(() => {
+                    // Clear any timers or intervals
+                    const highestId = window.setTimeout(() => {}, 0) as any as number;
+                    for (let i = 0; i <= highestId; i++) {
+                        clearTimeout(i);
+                        clearInterval(i);
+                    }
+                    
+                    // Force garbage collection if available
+                    if ((window as any).gc) {
+                        (window as any).gc();
+                    }
+                });
+                
+                // Clear browser cache
+                const context = this.page.context();
+                await context.clearCookies();
+            }
+        } catch (error) {
+            console.warn('Failed to cleanup memory:', error);
         }
     }
 

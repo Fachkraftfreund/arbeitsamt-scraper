@@ -41,15 +41,29 @@ export class ArbeitsagenturCrawler {
         let finalizePromise: PromiseLike<any> | null = null;
         let count = 0;
         let postings: Posting[] = [];
+        let lastCleanup = 0;
+        
         await this.jobCrawler.goto(url);
         await Promise.all(this.companyCrawlers.map(crawler => crawler.goto('https://www.arbeitsagentur.de/jobsuche/')));
+        
         while (true) {
             const i = count;
+            
+            // Periodic memory cleanup for main crawler
+            if (count - lastCleanup >= 50) {
+                console.log('Performing periodic memory cleanup...');
+                await this.jobCrawler.cleanupMemory();
+                await Promise.all(this.companyCrawlers.map(crawler => crawler.cleanupMemory()));
+                lastCleanup = count;
+            }
+            
             const found = await this.readArbeitsagenturPosting(i);
             if (!found) {
                 if (finalizePromise) await finalizePromise;
-                finalizePromise = this.addCompanyData(postings).then(postings => saveCallback(postings));
-                postings = [];
+                if (postings.length > 0) {
+                    finalizePromise = this.addCompanyData(postings).then(postings => saveCallback(postings));
+                    postings = [];
+                }
                 if (!await this.loadNextPage(i))
                     break;
                 console.log(`Processed ${count} postings, loading next page...`);
@@ -114,29 +128,55 @@ export class ArbeitsagenturCrawler {
     private async addCompanyData(postings: Posting[]) {
         const groupedPostings = groupBy(postings, (_, i) => i % this.companyCrawlers.length);
         await Promise.all(Object.entries(groupedPostings).map(async ([crawlerIndex, postings]) => {
+            let requestCount = 0;
             for (const posting of postings) {
-                const crawler = this.companyCrawlers[+crawlerIndex] ;
+                const crawler = this.companyCrawlers[+crawlerIndex];
                 const url = `https://www.arbeitsagentur.de/jobsuche/jobdetail/${posting.arbeitsagentur_id}`;
+                
                 try {
-                    await exponentialBackoff(() => crawler.goto(url, true), 3, 5000);
+                    // Periodic memory cleanup to prevent crashes
+                    if (requestCount % 10 === 0 && requestCount > 0) {
+                        await crawler.cleanupMemory();
+                    }
+                    
+                    // Try SPA navigation first, fall back to regular navigation
+                    await exponentialBackoff(async () => {
+                        try {
+                            await crawler.goto(url, true, 2); // Reduced retries for SPA navigation
+                        } catch (error) {
+                            console.warn(`SPA navigation failed for ${url}, falling back to regular navigation`);
+                            await crawler.goto(url, false, 3); // More retries for regular navigation
+                        }
+                    }, 2, 3000); // Reduced base retry attempts since goto now has its own retry logic
+                    
                 } catch (e) {
-                    await exponentialBackoff(() => crawler.goto(url, false), 3, 5000);
+                    console.error(`Failed to navigate to ${url} after all retries:`, e);
+                    // Continue processing other postings even if one fails
+                    continue;
                 }
-                const [address, beschreibung, link, companySize] = await Promise.all([
-                    crawler.getTextWithId('detail-arbeitsorte-arbeitsort-0'),
-                    crawler.getTextWithId('detail-beschreibung-beschreibung'),
-                    crawler.getLinkUrl('detail-agdarstellung-link-0', true),
-                    crawler.getTextWithId('detail-agdarstellung-betriebsgroesse'),
-                ]);
-                posting.postal_code = getPostalCodeFromAddress(address) ?? getPostalCodeFromAddress(beschreibung);
-                const street = address?.split(/, \d{4,}/)[0]?.trim() ?? null;
-                posting.website = link;
-                posting.company_size = companySize ? Math.round(+(companySize.split(' ')[0])) : null;
-                posting.street = street;
-                if (beschreibung) {
-                    posting.email = findEmailInText(beschreibung);
-                    posting.phone = findPhoneNumberInText(beschreibung);
+                
+                try {
+                    const [address, beschreibung, link, companySize] = await Promise.all([
+                        crawler.getTextWithId('detail-arbeitsorte-arbeitsort-0'),
+                        crawler.getTextWithId('detail-beschreibung-beschreibung'),
+                        crawler.getLinkUrl('detail-agdarstellung-link-0', true),
+                        crawler.getTextWithId('detail-agdarstellung-betriebsgroesse'),
+                    ]);
+                    posting.postal_code = getPostalCodeFromAddress(address) ?? getPostalCodeFromAddress(beschreibung);
+                    const street = address?.split(/, \d{4,}/)[0]?.trim() ?? null;
+                    posting.website = link;
+                    posting.company_size = companySize ? Math.round(+(companySize.split(' ')[0])) : null;
+                    posting.street = street;
+                    if (beschreibung) {
+                        posting.email = findEmailInText(beschreibung);
+                        posting.phone = findPhoneNumberInText(beschreibung);
+                    }
+                } catch (error) {
+                    console.warn(`Failed to extract data from ${url}:`, error);
+                    // Continue with next posting
                 }
+                
+                requestCount++;
             }
         }));
         return postings;
