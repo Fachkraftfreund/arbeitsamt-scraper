@@ -19,6 +19,7 @@ type Posting = {
     phone: string | null;
     website: string | null;
     company_size: number | null;
+    from_search_url?: string;
 }
 
 export class ArbeitsagenturCrawler {
@@ -61,6 +62,8 @@ export class ArbeitsagenturCrawler {
             if (!found) {
                 if (finalizePromise) await finalizePromise;
                 if (postings.length > 0) {
+                    for (const posting of postings)
+                        posting.from_search_url = url;
                     finalizePromise = this.addCompanyData(postings).then(postings => saveCallback(postings));
                     postings = [];
                 }
