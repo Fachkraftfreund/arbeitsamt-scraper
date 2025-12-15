@@ -30,6 +30,7 @@ export class ArbeitsagenturCrawler {
         return new ArbeitsagenturCrawler(jobCrawler, companyCrawlers);
     }
     
+    private readonly scrapedIds = new Set<string>();
     private readonly jobCrawler: Crawler;
     private readonly companyCrawlers: Crawler[];
 
@@ -58,13 +59,18 @@ export class ArbeitsagenturCrawler {
                 lastCleanup = count;
             }
             
-            const found = await this.readArbeitsagenturPosting(i);
-            if (!found) {
+            let found = await this.readArbeitsagenturPosting(i);
+            if (!found) { // last posting on the page reached
                 if (finalizePromise) await finalizePromise;
+                postings = postings.filter(posting => !this.scrapedIds.has(posting.arbeitsagentur_id));
+                for (const posting of postings)
+                    this.scrapedIds.add(posting.arbeitsagentur_id);
                 if (postings.length > 0) {
                     for (const posting of postings)
                         posting.from_search_url = url;
-                    finalizePromise = this.addCompanyData(postings).then(postings => saveCallback(postings));
+                    finalizePromise = this.addCompanyData(postings).then(async postings => {
+                        await saveCallback(postings)
+                    });
                     postings = [];
                 }
                 if (!await this.loadNextPage(i))
