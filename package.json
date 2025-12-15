@@ -7,21 +7,21 @@
 		"node": ">=18.0.0"
 	},
 	"dependencies": {
-		"apify": "^3.4.4",
-		"crawlee": "^3.14.1",
-		"playwright": "1.54.2"
+		"apify": "^3.5.2",
+		"crawlee": "^3.15.3",
+		"playwright": "^1.57.0"
 	},
 	"devDependencies": {
 		"@apify/eslint-config": "^1.1.0",
 		"@apify/tsconfig": "^0.1.1",
-		"@types/node": "^22.17.0",
-		"eslint": "^9.32.0",
+		"@types/node": "^22.19.3",
+		"eslint": "^9.39.2",
 		"eslint-config-prettier": "^10.1.8",
-		"globals": "^16.3.0",
-		"prettier": "^3.6.2",
-		"tsx": "^4.20.3",
-		"typescript": "^5.8.3",
-		"typescript-eslint": "^8.38.0"
+		"globals": "^16.5.0",
+		"prettier": "^3.7.4",
+		"tsx": "^4.21.0",
+		"typescript": "^5.9.3",
+		"typescript-eslint": "^8.49.0"
 	},
 	"scripts": {
 		"start": "npm run start:dev",

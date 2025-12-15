@@ -10,7 +10,6 @@
                 "type": "string"
             },
             "description": "arbeitsamt url with search parameters",
-            "editor": "textfield",
             "prefill": ["https://www.arbeitsagentur.de/jobsuche/suche?angebotsart=1&was=ZFA&wo=Deutschland%20(Land)"]
         },
         "parallelCompanyCrawlers": {
