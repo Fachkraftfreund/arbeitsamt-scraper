@@ -95,7 +95,7 @@ export class ArbeitsagenturCrawler {
         const companyName = await this.jobCrawler.getTextWithId(`eintrag-${i}-firma`);
         if (companyName == null) return;
         const [jobName, companyLocation, startDate, postDate, linkItem] = await Promise.all([
-            this.jobCrawler.getTextWithId(`eintrag-${i}-beruf`),
+            this.jobCrawler.getTextWithId(`eintrag-${i}-titel`),
             this.jobCrawler.getTextWithId(`eintrag-${i}-arbeitsort`),
             this.jobCrawler.getTextWithId(`eintrag-${i}-eintrittsdatum`),
             this.jobCrawler.getTitleAttrWithId(`eintrag-${i}-veroeffentlichungsdatum`),
